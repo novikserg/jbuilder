@@ -184,10 +184,14 @@ class Jbuilder
   def array!(collection = [], *attributes)
     array = if collection.nil?
       []
+    elsif ::Kernel.block_given? && attributes.any?
+      attributes_proc = ::Proc.new { |element| extract! element, *attributes }
+      _map_collection(collection, attributes_proc, ::Proc.new)
     elsif ::Kernel.block_given?
-      _map_collection(collection, &::Proc.new)
+      _map_collection(collection, ::Proc.new)
     elsif attributes.any?
-      _map_collection(collection) { |element| extract! element, *attributes }
+      attributes_proc = ::Proc.new { |element| extract! element, *attributes }
+      _map_collection(collection, attributes_proc)
     else
       collection.to_a
     end
@@ -293,9 +297,15 @@ class Jbuilder
     @attributes[_key(key)] = value
   end
 
-  def _map_collection(collection)
+  def _map_collection(collection, first_proc, second_proc = nil)
     collection.map do |element|
-      _scope{ yield element }
+      first_proc_hash = _scope{ first_proc.call(element) }
+      if second_proc
+        second_proc_hash = _scope{ second_proc.call(element) }
+        second_proc_hash.merge(first_proc_hash)
+      else
+        first_proc_hash
+      end
     end - [BLANK]
   end
 
